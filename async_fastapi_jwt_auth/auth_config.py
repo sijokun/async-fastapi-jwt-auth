@@ -1,6 +1,6 @@
 from datetime import timedelta
-from typing import Callable, List
-
+from typing import Awaitable, Callable, List
+import inspect
 from pydantic import ValidationError
 
 from async_fastapi_jwt_auth.config import LoadConfig
@@ -100,7 +100,7 @@ class AuthConfig:
             raise TypeError("Config must be pydantic 'BaseSettings' or list of tuple")
 
     @classmethod
-    def token_in_denylist_loader(cls, callback: Callable[..., bool]):
+    def token_in_denylist_loader(cls, callback: Callable[..., Awaitable[bool]]) -> Callable[..., Awaitable[bool]]:
         """
         This decorator sets the callback function that will be called when
         a protected endpoint is accessed and will check if the JWT has been
@@ -111,4 +111,12 @@ class AuthConfig:
         JWT (python dictionary) and returns *`True`* if the token has been deny,
         or *`False`* otherwise.
         """
-        cls._token_in_denylist_callback = callback
+        async def wrapper(*args, **kwargs) -> bool:
+            if not inspect.iscoroutinefunction(callback):
+                return callback(*args, **kwargs)
+            else:
+                return await callback(*args, **kwargs)
+
+        cls._token_in_denylist_callback = wrapper
+
+        return wrapper
